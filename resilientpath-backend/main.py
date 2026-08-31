@@ -40,17 +40,20 @@ async def lifespan(app: FastAPI):
   Starts the 10-second news aggregation polling worker on startup. Cancels it
   cleanly on shutdown.
   """
-  logger.info("[Startup] Launching news aggregation background worker...")
-  worker_task = asyncio.create_task(background_polling_worker())
+  worker_task = None
+  if not os.environ.get("VERCEL"):
+    logger.info("[Startup] Launching news aggregation background worker...")
+    worker_task = asyncio.create_task(background_polling_worker())
 
   yield  # Application runs here
 
-  logger.info("[Shutdown] Cancelling news aggregation worker...")
-  worker_task.cancel()
-  try:
-    await worker_task
-  except asyncio.CancelledError:
-    logger.info("[Shutdown] Worker stopped cleanly.")
+  if worker_task:
+    logger.info("[Shutdown] Cancelling news aggregation worker...")
+    worker_task.cancel()
+    try:
+      await worker_task
+    except asyncio.CancelledError:
+      logger.info("[Shutdown] Worker stopped cleanly.")
 
 
 # ─── FastAPI Application ──────────────────────────────────────────────────────
