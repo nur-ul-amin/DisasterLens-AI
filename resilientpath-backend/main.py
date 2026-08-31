@@ -214,8 +214,12 @@ if os.path.exists(icons_dir):
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if not os.path.exists(static_dir):
-  os.makedirs(static_dir)
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+  try:
+    os.makedirs(static_dir)
+  except OSError:
+    pass
+if os.path.exists(static_dir):
+  app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 # ─── Entry Point ──────────────────────────────────────────────────────────────
