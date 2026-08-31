@@ -17,7 +17,7 @@
  * ============================================================================
  */
 
-const CACHE_NAME = 'disasterlens-v3';
+const CACHE_NAME = 'disasterlens-v4';
 
 // Core app shell assets to pre-cache on install
 // These are the minimum resources needed for the app to function offline
