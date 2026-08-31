@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+geoalchemy2
+pydantic
+shapely
+# v2.0: News Aggregation Subsystem dependencies
+httpx
+feedparser
+python-dateutil
+pandas
+pyarrow

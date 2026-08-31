@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NDMA NEOC | Project 1 Demo Prototype — Live Dashboard</title>
+    
+    <!-- Leaflet & MarkerCluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    
+    <!-- Dashboard Styles -->
+    <link rel="stylesheet" href="static/style.css" />
+</head>
+<body class="dark-mode">
+
+    <!-- Header -->
+    <header class="neoc-header">
+        <div class="logo-area">
+            <div class="shield"></div>
+            <div>
+                <h1>NEOC Live Operations</h1>
+                <h2>NDMA Project 1 — Pakistan Disaster Command & Control <span class="pk-badge">🇵🇰 PAKISTAN ONLY</span></h2>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-primary" onclick="exportData('csv')">Export CSV</button>
+            <button class="btn btn-secondary" onclick="exportData('geojson')">Export GeoJSON</button>
+            <div class="live-indicator">
+                <span class="pulsing-dot"></span> LIVE
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Layout: 70/30 Split -->
+    <div class="dashboard-container">
+        
+        <!-- Map Panel (70%) -->
+        <main class="map-panel">
+            <div id="neoc-map"></div>
+            
+            <!-- Map Overlay Controls -->
+            <div class="map-controls-overlay">
+                <div class="control-group">
+                    <label>Severity Filter</label>
+                    <select id="filter-urgency" onchange="applyFilters()">
+                        <option value="all">All Incidents</option>
+                        <option value="high">High Urgency (>80)</option>
+                        <option value="medium">Medium Urgency (50-80)</option>
+                        <option value="low">Low Urgency (<50)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Passability Filter</label>
+                    <select id="filter-passability" onchange="applyFilters()">
+                        <option value="all">Any Vehicle Type</option>
+                        <option value="4x4">4x4 Accessible</option>
+                        <option value="Boat">Boat Required</option>
+                        <option value="Completely Impassable">Impassable / Blocked</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Verified Source</label>
+                    <select id="filter-source" onchange="applyFilters()">
+                        <option value="all">All Verified Sources</option>
+                        <option value="X">X (Twitter)</option>
+                        <option value="Facebook">Facebook</option>
+                        <option value="Instagram">Instagram</option>
+                        <option value="News">News Outlets (Dawn / Geo)</option>
+                        <option value="PWA">PWA Field Reports</option>
+                    </select>
+                </div>
+            </div>
+        </main>
+
+        <!-- Sidebar Panel (30%) -->
+        <aside class="sidebar-panel">
+            
+            <!-- Stats Row -->
+            <div class="stats-grid">
+                <div class="stat-card danger">
+                    <div class="stat-value" id="stat-critical">0</div>
+                    <div class="stat-label">Critical Hotspots</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-value" id="stat-active">0</div>
+                    <div class="stat-label">Active Reports</div>
+                </div>
+            </div>
+
+            <!-- Live Event Stream -->
+            <div class="event-stream">
+                <div class="stream-header">
+                    <h3>Live Incident Stream</h3>
+                    <span class="auto-refresh">Updating every 5s</span>
+                </div>
+                <div class="stream-list" id="incident-list">
+                    <!-- JS populated items -->
+                    <div class="loading-text">Connecting to NDMA Project 1 live stream...</div>
+                </div>
+            </div>
+
+        </aside>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="static/dashboard_app.js"></script>
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    ============================================================================
+    NDMA DisasterLens AI v2.0 — Live Disaster News Dashboard
+    National Disaster Management Authority, Pakistan
+    ============================================================================
+    Aggregates real-time disaster news from GDACS, ReliefWeb, USGS, GDELT.
+    Trust-scored, geo-clustered incidents rendered on a live Leaflet map.
+    Auto-refresh: every 10 seconds via NewsLayerManager polling engine.
+    ============================================================================
+  -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO -->
+  <title>NDMA DisasterLens AI — Live Disaster News | Pakistan Multi-Hazard Dashboard</title>
+  <meta name="description" content="Real-time disaster news aggregation dashboard by NDMA Pakistan. Live clustering of flood, earthquake, landslide and multi-hazard alerts with AI-powered trust scoring.">
+  <meta name="author" content="NDMA Pakistan — DRR Wing">
+  <meta name="keywords" content="NDMA, Pakistan, disaster, flood, earthquake, live news, GeoJSON, Leaflet">
+
+  <!-- Preconnect -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
+
+  <!-- Leaflet.js 1.9.4 -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="">
+  </script>
+
+  <!-- Leaflet MarkerCluster (optional, for dense clusters) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <!-- Dashboard Styles -->
+  <link rel="stylesheet" href="news_panel.css">
+
+  <!-- Favicon -->
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+</head>
+
+<body>
+  <div class="dashboard-root" id="dashboard-root">
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         HEADER — Branding, live indicator, clock, action buttons
+         ═══════════════════════════════════════════════════════════════════ -->
+    <header class="dashboard-header" id="dashboard-header">
+      <!-- Brand -->
+      <div class="header-brand">
+        <div class="header-logo">🛰️</div>
+        <div>
+          <div class="header-title">NDMA DisasterLens AI</div>
+          <div class="header-subtitle">Pakistan Multi-Hazard Command System · v2.0</div>
+        </div>
+      </div>
+
+      <!-- Center: Live indicator + clock -->
+      <div class="header-center">
+        <div class="live-indicator">
+          <div class="live-dot"></div>
+          <span class="live-text">LIVE</span>
+        </div>
+        <div class="header-clock" id="dashboard-clock">--:--:--</div>
+      </div>
+
+      <!-- Right: Action buttons -->
+      <div class="header-right">
+        <button class="header-btn" id="btn-force-refresh" title="Force immediate refresh">
+          🔄 Refresh
+        </button>
+        <button class="header-btn" id="btn-toggle-panel" title="Toggle news panel">
+          📋 Panel
+        </button>
+        <a href="index.html" class="header-btn" title="Back to PWA reporting">
+          📡 Report
+        </a>
+        <a href="http://localhost:8000/api/docs" target="_blank" class="header-btn" title="API Docs">
+          📖 API
+        </a>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         STATUS BAR — Worker health, cluster count, last update time
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div class="status-bar" id="status-bar">
+      <span class="status-dot status-offline"></span>
+      <span>Connecting to aggregation worker...</span>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         MAP — Full-area Leaflet.js map
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="dashboard-map">
+
+      <!-- Map Legend -->
+      <div class="map-legend" id="map-legend">
+        <div class="legend-title">Trust Level</div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#22c55e; box-shadow: 0 0 6px #22c55e;"></div>
+          <span>High Trust ≥80%</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#f59e0b;"></div>
+          <span>Moderate 50–79%</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#ef4444;"></div>
+          <span>Unverified &lt;50%</span>
+        </div>
+
+        <div class="legend-title" style="margin-top:10px;">Hazard Types</div>
+        <div class="legend-item"><span>🌊 Flood</span></div>
+        <div class="legend-item"><span>🌍 Earthquake</span></div>
+        <div class="legend-item"><span>🏔️ Landslide</span></div>
+        <div class="legend-item"><span>🧊 GLOF</span></div>
+        <div class="legend-item"><span>⛈️ Severe Storm</span></div>
+        <div class="legend-item"><span>❄️ Avalanche</span></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         NEWS PANEL — Scrollable live disaster news feed
+         ═══════════════════════════════════════════════════════════════════ -->
+    <aside class="news-panel" id="news-panel">
+      <!-- Panel Header with filters -->
+      <div class="panel-header">
+        <div class="panel-title">
+          📡 Live Disaster Clusters
+          <span class="panel-count" id="panel-count">0</span>
+        </div>
+
+        <!-- Category filter chips -->
+        <div class="panel-filters" id="panel-filters" role="group" aria-label="Filter by hazard category">
+          <button class="filter-chip active" id="filter-all" data-category="">All</button>
+          <button class="filter-chip" data-category="Flood">🌊 Flood</button>
+          <button class="filter-chip" data-category="Earthquake">🌍 Quake</button>
+          <button class="filter-chip" data-category="Landslide">🏔️ Slide</button>
+          <button class="filter-chip" data-category="Severe Storm">⛈️ Storm</button>
+          <button class="filter-chip" data-category="GLOF">🧊 GLOF</button>
+        </div>
+
+        <!-- Trust filter -->
+        <div class="panel-filters" style="margin-top:6px;" id="trust-filters">
+          <button class="filter-chip active" id="trust-all" data-trust="0">All Trust</button>
+          <button class="filter-chip" data-trust="80">✅ High Only</button>
+          <button class="filter-chip" data-trust="50">⚠️ Mod+</button>
+        </div>
+      </div>
+
+      <!-- News card list (populated by news_layer.js) -->
+      <div class="panel-body" id="news-cards">
+        <div class="no-news-placeholder">
+          <div style="font-size:48px; margin-bottom:16px;">📡</div>
+          <div>Connecting to aggregation worker...</div>
+          <div style="color:#475569; font-size:12px; margin-top:8px;">
+            Fetching from GDACS · ReliefWeb · USGS · GDELT</div>
+        </div>
+      </div>
+    </aside>
+
+  </div><!-- /.dashboard-root -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       SCRIPTS — Leaflet map init + news layer polling engine
+       ═══════════════════════════════════════════════════════════════════ -->
+  <script src="news_layer.js"></script>
+  <script>
+    // ────────────────────────────────────────────────────────────────────
+    // DASHBOARD INITIALIZATION
+    // ────────────────────────────────────────────────────────────────────
+
+    'use strict';
+
+    // ── 1. Initialize Leaflet Map ───────────────────────────────────────
+    const map = L.map('dashboard-map', {
+      center: NEWS_CONFIG.MAP_CENTER,
+      zoom: NEWS_CONFIG.MAP_ZOOM,
+      maxZoom: NEWS_CONFIG.MAX_ZOOM,
+      zoomControl: false,
+      attributionControl: true,
+    });
+
+    // Dark-mode tile layer (CartoDB Dark Matter)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a> | NDMA Pakistan',
+      subdomains: 'abcd',
+      maxZoom: 20,
+    }).addTo(map);
+
+    // Add zoom control to bottom-right
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // ── 2. Initialize NewsLayerManager ──────────────────────────────────
+    const nlm = new NewsLayerManager(map, 'news-cards', 'status-bar');
+    nlm.startPolling();
+
+    // ── 3. Live Clock ────────────────────────────────────────────────────
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('dashboard-clock').textContent =
+        now.toLocaleTimeString('en-PK', { hour12: false,
+          timeZone: 'Asia/Karachi', hour: '2-digit',
+          minute: '2-digit', second: '2-digit' }) + ' PKT';
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ── 4. Panel count updater (reuses MutationObserver) ─────────────────
+    const panelBody = document.getElementById('news-cards');
+    const panelCount = document.getElementById('panel-count');
+
+    const countObserver = new MutationObserver(() => {
+      const cards = panelBody.querySelectorAll('.news-card');
+      panelCount.textContent = cards.length;
+    });
+    countObserver.observe(panelBody, { childList: true, subtree: false });
+
+    // ── 5. Category Filter Chips ─────────────────────────────────────────
+    document.getElementById('panel-filters').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-category]');
+      if (!chip) return;
+
+      // Update active state
+      document.querySelectorAll('#panel-filters .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+
+      const category = chip.dataset.category || null;
+      nlm.filterByCategory(category);
+    });
+
+    // ── 6. Trust Filter Chips ────────────────────────────────────────────
+    document.getElementById('trust-filters').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-trust]');
+      if (!chip) return;
+
+      document.querySelectorAll('#trust-filters .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+
+      const minTrust = parseFloat(chip.dataset.trust) || null;
+      nlm.filterByMinTrust(minTrust);
+    });
+
+    // ── 7. Force Refresh Button ──────────────────────────────────────────
+    document.getElementById('btn-force-refresh').addEventListener('click', async () => {
+      try {
+        await fetch(`${NEWS_CONFIG.API_BASE}/api/v1/news/refresh`, { method: 'POST' });
+        // Immediately poll for fresh data
+        setTimeout(() => nlm._fetchAndRender(), 2000);
+      } catch (err) {
+        console.warn('Force refresh failed:', err);
+      }
+    });
+
+    // ── 8. Toggle Panel Button ───────────────────────────────────────────
+    let panelVisible = true;
+    document.getElementById('btn-toggle-panel').addEventListener('click', () => {
+      const panel = document.getElementById('news-panel');
+      const root = document.getElementById('dashboard-root');
+      panelVisible = !panelVisible;
+      if (panelVisible) {
+        panel.style.display = '';
+        root.style.gridTemplateColumns = `1fr var(--panel-w)`;
+      } else {
+        panel.style.display = 'none';
+        root.style.gridTemplateColumns = '1fr';
+      }
+      // Notify Leaflet map size changed
+      setTimeout(() => map.invalidateSize(), 310);
+    });
+
+    // ── 9. Pakistan boundary highlight ───────────────────────────────────
+    // Soft highlight of Pakistan on the dark map for orientation
+    const pkBounds = [[23.5, 60.5], [37.5, 77.5]];
+    L.rectangle(pkBounds, {
+      color: 'rgba(59, 130, 246, 0.35)',
+      weight: 1.5,
+      fill: false,
+      dashArray: '6 4',
+      interactive: false,
+    }).addTo(map).bindTooltip('Pakistan — Primary Focus Area', {
+      permanent: false, direction: 'top', className: 'pk-tooltip'
+    });
+
+  </script>
+</body>
+</html>

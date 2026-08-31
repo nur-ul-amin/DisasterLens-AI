@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    ============================================================================
+    NDMA DisasterLens AI v2.0 — Live Disaster News Dashboard
+    National Disaster Management Authority, Pakistan
+    ============================================================================
+    Aggregates real-time disaster news from GDACS, ReliefWeb, USGS, GDELT.
+    Trust-scored, geo-clustered incidents rendered on a live Leaflet map.
+    Auto-refresh: every 10 seconds via NewsLayerManager polling engine.
+    ============================================================================
+  -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- SEO -->
+  <title>NDMA DisasterLens AI — Live Disaster News | Pakistan Multi-Hazard Dashboard</title>
+  <meta name="description" content="Real-time disaster news aggregation dashboard by NDMA Pakistan. Live clustering of flood, earthquake, landslide and multi-hazard alerts with AI-powered trust scoring.">
+  <meta name="author" content="NDMA Pakistan — DRR Wing">
+  <meta name="keywords" content="NDMA, Pakistan, disaster, flood, earthquake, live news, GeoJSON, Leaflet">
+
+  <!-- Preconnect -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
+
+  <!-- Leaflet.js 1.9.4 -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="">
+  </script>
+
+  <!-- Leaflet MarkerCluster (optional, for dense clusters) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <!-- Dashboard Styles -->
+  <link rel="stylesheet" href="news_panel.css">
+
+  <!-- Favicon -->
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+</head>
+
+<body>
+  <div class="dashboard-root" id="dashboard-root">
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         HEADER — Branding, live indicator, clock, action buttons
+         ═══════════════════════════════════════════════════════════════════ -->
+    <header class="dashboard-header" id="dashboard-header">
+      <!-- Brand -->
+      <div class="header-brand">
+        <div class="header-logo">🛰️</div>
+        <div>
+          <div class="header-title">NDMA DisasterLens AI</div>
+          <div class="header-subtitle">Pakistan Multi-Hazard Command System · v2.0</div>
+        </div>
+      </div>
+
+      <!-- Center: Live indicator + clock -->
+      <div class="header-center">
+        <div class="live-indicator">
+          <div class="live-dot"></div>
+          <span class="live-text">LIVE</span>
+        </div>
+        <div class="header-clock" id="dashboard-clock">--:--:--</div>
+      </div>
+
+      <!-- Right: Action buttons -->
+      <div class="header-right">
+        <button class="header-btn" id="btn-export-data" title="Export Disaster Data">
+          💾 Export Data
+        </button>
+        <button class="header-btn" id="btn-force-refresh" title="Force immediate refresh">
+          🔄 Refresh
+        </button>
+        <button class="header-btn" id="btn-toggle-panel" title="Toggle news panel">
+          📋 Panel
+        </button>
+        <a href="index.html" class="header-btn" title="Back to PWA reporting">
+          📡 Report
+        </a>
+        <a href="http://localhost:8000/api/docs" target="_blank" class="header-btn" title="API Docs">
+          📖 API
+        </a>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         STATUS BAR — Worker health, cluster count, last update time
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div class="status-bar" id="status-bar">
+      <span class="status-dot status-offline"></span>
+      <span>Connecting to aggregation worker...</span>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         MAP — Full-area Leaflet.js map
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="dashboard-map">
+
+      <!-- Map Legend -->
+      <div class="map-legend" id="map-legend">
+        <div class="legend-title">Trust Level</div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#22c55e; box-shadow: 0 0 6px #22c55e;"></div>
+          <span>High Trust ≥80%</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#f59e0b;"></div>
+          <span>Moderate 50–79%</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#ef4444;"></div>
+          <span>Unverified &lt;50%</span>
+        </div>
+
+        <div class="legend-title" style="margin-top:10px;">Hazard Types</div>
+        <div class="legend-item"><span>🌊 Flood</span></div>
+        <div class="legend-item"><span>🌍 Earthquake</span></div>
+        <div class="legend-item"><span>🏔️ Landslide</span></div>
+        <div class="legend-item"><span>🧊 GLOF</span></div>
+        <div class="legend-item"><span>⛈️ Severe Storm</span></div>
+        <div class="legend-item"><span>❄️ Avalanche</span></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         NEWS PANEL — Scrollable live disaster news feed
+         ═══════════════════════════════════════════════════════════════════ -->
+    <aside class="news-panel" id="news-panel">
+      <!-- Panel Header with filters -->
+      <div class="panel-header">
+        <div class="panel-title">
+          📡 Live Disaster Clusters
+          <span class="panel-count" id="panel-count">0</span>
+        </div>
+
+        <!-- Category filter chips -->
+        <div class="panel-filters" id="panel-filters" role="group" aria-label="Filter by hazard category">
+          <button class="filter-chip active" id="filter-all" data-category="">All</button>
+          <button class="filter-chip" data-category="Flood">🌊 Flood</button>
+          <button class="filter-chip" data-category="Earthquake">🌍 Quake</button>
+          <button class="filter-chip" data-category="Landslide">🏔️ Slide</button>
+          <button class="filter-chip" data-category="Severe Storm">⛈️ Storm</button>
+          <button class="filter-chip" data-category="GLOF">🧊 GLOF</button>
+        </div>
+
+        <!-- Trust filter -->
+        <div class="panel-filters" style="margin-top:6px;" id="trust-filters">
+          <button class="filter-chip active" id="trust-all" data-trust="0">All Trust</button>
+          <button class="filter-chip" data-trust="80">✅ High Only</button>
+          <button class="filter-chip" data-trust="50">⚠️ Mod+</button>
+        </div>
+      </div>
+
+      <div class="panel-body" id="news-cards">
+        <div class="no-news-placeholder" id="loading-placeholder">
+          <div style="font-size:44px; margin-bottom:14px; animation: pulse-live 1.5s infinite;">📡</div>
+          <div style="font-weight:600; margin-bottom:6px;">Connecting to live feeds…</div>
+          <div style="color:#475569; font-size:11px; line-height:1.6;">
+            GDACS · USGS · UN OCHA<br>
+            <span id="loading-dots" style="color:#3b82f6;">Fetching data</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </div><!-- /.dashboard-root -->
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         EXPORT DATA MODAL
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="export-modal" class="modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
+      <div class="modal-content" style="background:#1e293b; padding:24px; border-radius:12px; width:400px; max-width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.8); color:#e2e8f0; font-family:'Inter', sans-serif;">
+        <h2 style="margin-top:0; border-bottom:1px solid #334155; padding-bottom:12px; font-size:18px;">💾 Export Disaster Data</h2>
+        
+        <div style="margin-bottom:16px;">
+          <div style="font-size:12px; color:#94a3b8; margin-bottom:4px;">Live Export Statistics</div>
+          <div style="display:flex; justify-content:space-between; background:#0f172a; padding:12px; border-radius:8px;">
+            <div style="text-align:center;">
+              <div id="stat-total-fetched" style="font-size:24px; font-weight:700; color:#3b82f6;">-</div>
+              <div style="font-size:11px; color:#64748b;">Total Fetched</div>
+            </div>
+            <div style="border-left:1px solid #334155;"></div>
+            <div style="text-align:center;">
+              <div id="stat-today-fetched" style="font-size:24px; font-weight:700; color:#22c55e;">-</div>
+              <div style="font-size:11px; color:#64748b;">Fetched Today</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Data Format</label>
+          <select id="export-format" style="width:100%; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:6px; outline:none;">
+            <option value="parquet">Parquet (Highly compressed)</option>
+            <option value="geojson">GeoJSON (Map-ready)</option>
+            <option value="csv">CSV (Spreadsheet)</option>
+            <option value="jsonl">JSONL (Streaming JSON)</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Time Period</label>
+          <select id="export-period" style="width:100%; padding:8px; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:6px; outline:none;">
+            <option value="all">All Time (Data fetched so far)</option>
+            <option value="today">Today (Data fetched today)</option>
+          </select>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:12px;">
+          <button id="btn-export-cancel" style="padding:8px 16px; background:transparent; color:#94a3b8; border:1px solid #475569; border-radius:6px; cursor:pointer;">Cancel</button>
+          <button id="btn-export-download" style="padding:8px 16px; background:#3b82f6; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600;">Download</button>
+        </div>
+      </div>
+    </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       SCRIPTS — Leaflet map init + news layer polling engine
+       ═══════════════════════════════════════════════════════════════════ -->
+  <script src="news_layer.js"></script>
+  <script>
+    // ────────────────────────────────────────────────────────────────────
+    // DASHBOARD INITIALIZATION
+    // ────────────────────────────────────────────────────────────────────
+
+    'use strict';
+
+    // ── 1. Initialize Leaflet Map ───────────────────────────────────────
+    const map = L.map('dashboard-map', {
+      center: NEWS_CONFIG.MAP_CENTER,
+      zoom: NEWS_CONFIG.MAP_ZOOM,
+      maxZoom: NEWS_CONFIG.MAX_ZOOM,
+      zoomControl: false,
+      attributionControl: true,
+    });
+
+    // Dark-mode tile layer (CartoDB Dark Matter)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a> | NDMA Pakistan',
+      subdomains: 'abcd',
+      maxZoom: 20,
+    }).addTo(map);
+
+    // Add zoom control to bottom-right
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // ── 2. Initialize NewsLayerManager ──────────────────────────────────
+    const nlm = new NewsLayerManager(map, 'news-cards', 'status-bar');
+    nlm.startPolling();
+
+    // ── 3. Live Clock ────────────────────────────────────────────────────
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('dashboard-clock').textContent =
+        now.toLocaleTimeString('en-PK', { hour12: false,
+          timeZone: 'Asia/Karachi', hour: '2-digit',
+          minute: '2-digit', second: '2-digit' }) + ' PKT';
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ── 4. Panel count updater (reuses MutationObserver) ─────────────────
+    const panelBody = document.getElementById('news-cards');
+    const panelCount = document.getElementById('panel-count');
+
+    const countObserver = new MutationObserver(() => {
+      const cards = panelBody.querySelectorAll('.news-card');
+      panelCount.textContent = cards.length;
+    });
+    countObserver.observe(panelBody, { childList: true, subtree: false });
+
+    // ── 5. Category Filter Chips ─────────────────────────────────────────
+    document.getElementById('panel-filters').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-category]');
+      if (!chip) return;
+
+      // Update active state
+      document.querySelectorAll('#panel-filters .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+
+      const category = chip.dataset.category || null;
+      nlm.filterByCategory(category);
+    });
+
+    // ── 6. Trust Filter Chips ────────────────────────────────────────────
+    document.getElementById('trust-filters').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-trust]');
+      if (!chip) return;
+
+      document.querySelectorAll('#trust-filters .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+
+      const minTrust = parseFloat(chip.dataset.trust) || null;
+      nlm.filterByMinTrust(minTrust);
+    });
+
+    // ── 7. Force Refresh Button ──────────────────────────────────────────
+    document.getElementById('btn-force-refresh').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-force-refresh');
+      btn.textContent = '⏳ Refreshing…';
+      btn.disabled = true;
+      try {
+        await fetch(`${NEWS_CONFIG.API_BASE}/api/v1/news/refresh`, { method: 'POST' });
+        setTimeout(() => { nlm.fetchNow(); }, 1500);
+      } catch (err) {
+        console.warn('Force refresh failed:', err);
+      } finally {
+        setTimeout(() => { btn.textContent = '🔄 Refresh'; btn.disabled = false; }, 3000);
+      }
+    });
+
+    // ── 8. Toggle Panel Button ───────────────────────────────────────────
+    let panelVisible = true;
+    document.getElementById('btn-toggle-panel').addEventListener('click', () => {
+      const panel = document.getElementById('news-panel');
+      const root = document.getElementById('dashboard-root');
+      panelVisible = !panelVisible;
+      if (panelVisible) {
+        panel.style.display = '';
+        root.style.gridTemplateColumns = `1fr var(--panel-w)`;
+      } else {
+        panel.style.display = 'none';
+        root.style.gridTemplateColumns = '1fr';
+      }
+      // Notify Leaflet map size changed
+      setTimeout(() => map.invalidateSize(), 310);
+    });
+
+    // ── 9. Pakistan boundary highlight ───────────────────────────────────
+    const pkBounds = [[23.5, 60.5], [37.5, 77.5]];
+    L.rectangle(pkBounds, {
+      color: 'rgba(59, 130, 246, 0.35)',
+      weight: 1.5,
+      fill: false,
+      dashArray: '6 4',
+      interactive: false,
+    }).addTo(map).bindTooltip('Pakistan — Primary Focus Area', {
+      permanent: false, direction: 'top', className: 'pk-tooltip'
+    });
+
+    // ── 10. Animated loading dots ─────────────────────────────────────────
+    const loadingDots = document.getElementById('loading-dots');
+    if (loadingDots) {
+      const dotFrames = ['Fetching data', 'Fetching data.', 'Fetching data..', 'Fetching data...'];
+      let dotIdx = 0;
+      const dotTimer = setInterval(() => {
+        if (!document.getElementById('loading-placeholder')) { clearInterval(dotTimer); return; }
+        loadingDots.textContent = dotFrames[dotIdx++ % 4];
+      }, 450);
+    }
+
+    // ── 11. Pre-flight server health check ───────────────────────────────
+    (async function checkServerOnLoad() {
+      try {
+        const r = await fetch(`${NEWS_CONFIG.API_BASE}/api/v1/news/status`, { cache: 'no-cache' });
+        if (r.ok) {
+          const s = await r.json();
+          console.log('[Startup] Server OK. Items:', s.item_count, '| Polls:', s.poll_count);
+          if (s.item_count === 0) {
+            const ld = document.getElementById('loading-dots');
+            if (ld) ld.textContent = 'Server warming up — first cycle in progress…';
+          }
+        }
+      } catch (e) {
+        const ld = document.getElementById('loading-dots');
+        if (ld) {
+          ld.style.color = '#ef4444';
+          ld.textContent = '⚠ Backend offline. Start: python main.py';
+        }
+        const sb = document.getElementById('status-bar');
+        if (sb) sb.innerHTML = '<span class="status-dot status-offline"></span> <span style="color:#ef4444">⚠ Backend offline — run: python main.py in the backend folder</span>';
+      }
+    })();
+
+    // ── 12. Export Data Logic ────────────────────────────────────────────
+    const exportBtn = document.getElementById('btn-export-data');
+    const exportModal = document.getElementById('export-modal');
+    const exportCancel = document.getElementById('btn-export-cancel');
+    const exportDownload = document.getElementById('btn-export-download');
+
+    if (exportBtn) {
+      exportBtn.addEventListener('click', async () => {
+        exportModal.style.display = 'flex';
+        // Fetch stats
+        try {
+          const r = await fetch(`${NEWS_CONFIG.API_BASE}/api/v1/news/export/stats`);
+          if (r.ok) {
+            const stats = await r.json();
+            document.getElementById('stat-total-fetched').textContent = stats.total;
+            document.getElementById('stat-today-fetched').textContent = stats.today;
+          }
+        } catch (e) {
+          console.warn('Failed to fetch export stats', e);
+        }
+      });
+    }
+
+    if (exportCancel) {
+      exportCancel.addEventListener('click', () => {
+        exportModal.style.display = 'none';
+      });
+    }
+
+    if (exportDownload) {
+      exportDownload.addEventListener('click', () => {
+        const format = document.getElementById('export-format').value;
+        const period = document.getElementById('export-period').value;
+        const url = `${NEWS_CONFIG.API_BASE}/api/v1/news/export?format=${format}&period=${period}`;
+        
+        // Trigger download
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        exportModal.style.display = 'none';
+      });
+    }
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "NDMA Project 1 — Demo Prototype",
+  "short_name": "NDMA Proj 1",
+  "description": "NDMA Project 1 Demo Prototype — Community crowdsourced flood hazard reporting platform for NDMA Pakistan. Report submerged roads, water depth, and vehicle passability in real-time.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#134e4a",
+  "background_color": "#0f332f",
+  "categories": ["government", "utilities", "weather"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

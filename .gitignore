@@ -1,0 +1,13 @@
+venv/
+**/venv/
+*.zip
+*.tar.gz
+*.db
+*.sqlite
+*.sqlite3
+*.pt
+*.bin
+*.onnx
+__pycache__/
+**/__pycache__/
+.DS_Store

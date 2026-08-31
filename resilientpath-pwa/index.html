@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    ============================================================================
+    NDMA Project 1 — Demo Prototype: Flood Reporting PWA
+    Phase 1: Community Crowdsourced Early Warning & Routing Platform
+    National Disaster Management Authority, Pakistan (DRR Wing)
+    ============================================================================
+    
+    ARCHITECTURE CONTEXT:
+    - Phase 1 (This): Mobile-first PWA with offline reporting & map interface
+    - Phase 2: FastAPI backend + Urdu NLP pipeline for report classification
+    - Phase 3: NEOC Dashboard with real-time flood routing overlays
+    ============================================================================
+  -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  
+  <!-- SEO & Social -->
+  <title>NDMA Project 1 — Demo Prototype | Flood Reporting</title>
+  <meta name="description" content="NDMA Project 1 Demo Prototype — Community crowdsourced flood hazard reporting platform by NDMA Pakistan. Report submerged roads, water depth levels, and vehicle passability during monsoon emergencies.">
+  <meta name="keywords" content="NDMA, Pakistan, flood reporting, disaster management, early warning, monsoon, crowdsource">
+  <meta name="author" content="NDMA Pakistan — DRR Wing">
+  
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#134e4a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="NDMA Project 1">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Preconnect for Performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://tile.openstreetmap.org">
+  
+  <!-- Google Fonts: Inter (UI) + Noto Nastaliq Urdu (Bilingual) -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet.js 1.9.4 (Lightweight Map Engine) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       HEADER — App title, offline status, language toggle
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <header class="app-header" id="app-header">
+    <div class="app-logo">
+      <img src="icons/icon-192.png" alt="NDMA Logo" class="app-logo-icon">
+      <div>
+        <div class="app-title" data-i18n="appTitle">NDMA Project 1</div>
+        <div class="app-title-sub" data-i18n="appSubtitle">Demo Prototype — Flood Reporting</div>
+      </div>
+    </div>
+    
+    <div class="header-actions">
+      <!-- Offline/Online Status Badge -->
+      <div class="offline-badge" id="offline-badge">
+        <span class="dot"></span>
+        <span data-i18n="offline">Offline</span>
+      </div>
+      <div class="online-badge visible" id="online-badge">
+        <span class="dot"></span>
+        <span data-i18n="online">Online</span>
+      </div>
+      
+      <!-- Sync Queue Status -->
+      <div class="sync-status" id="sync-status">
+        <span class="sync-spinner"></span>
+        <span id="sync-count">0</span>
+        <span data-i18n="pending">pending</span>
+      </div>
+      
+      <!-- Language Toggle EN/UR -->
+      <button class="lang-toggle" id="lang-toggle" aria-label="Toggle Language" title="Switch English / اردو">
+        EN
+      </button>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MAP CONTAINER — Full-viewport Leaflet.js + OpenStreetMap
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="map-container">
+    <div id="map"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       COORDINATES DISPLAY — Shows current pin lat/lng + reverse geocoded name
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="coords-display" id="coords-display" style="display: none;">
+    <div class="coords-label" data-i18n="pinLocation">📍 Pin Location</div>
+    <div id="coords-text">—</div>
+    <div class="coords-address" id="coords-address">Tap map to set location</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       FLOATING ACTION BUTTONS — Report hazard + Detect location
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="fab-container">
+    <!-- Detect My Location -->
+    <button class="fab fab-secondary" id="btn-locate" aria-label="Detect My Location" title="Detect My Location">
+      <span class="fab-label" data-i18n="detectLocation">Detect Location</span>
+      📍
+      <div class="gps-spinner" id="gps-spinner"></div>
+    </button>
+    
+    <!-- Report Hazard (Primary FAB) -->
+    <button class="fab fab-primary" id="btn-report" aria-label="Report Flood Hazard" title="Report Flood Hazard">
+      <span class="fab-label" data-i18n="reportHazard">Report Hazard</span>
+      🚨
+      <span class="fab-badge" id="pending-badge">0</span>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       DRAWER OVERLAY — Dim background when report panel is open
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="drawer-overlay" id="drawer-overlay"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       REPORT DRAWER — Slide-up hazard assessment form
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="report-drawer" id="report-drawer">
+    <div class="drawer-handle"></div>
+    
+    <div class="drawer-header">
+      <h1 class="drawer-title" data-i18n="reportTitle">⚠️ Flood Hazard Report</h1>
+      <button class="drawer-close" id="drawer-close" aria-label="Close">✕</button>
+    </div>
+    
+    <div class="drawer-body">
+      <form id="hazard-form" autocomplete="off">
+        
+        <!-- LOCATION CARD — Shows selected coordinates -->
+        <div class="location-card" id="location-card">
+          <span class="loc-icon">📌</span>
+          <div class="loc-info">
+            <div class="loc-coords" id="form-coords">No location set</div>
+            <div class="loc-address" id="form-address">Tap map or use GPS to set pin</div>
+          </div>
+          <span class="loc-status unset" id="loc-status" data-i18n="notSet">Not Set</span>
+        </div>
+
+        <!-- ─── SECTION 1: Water Depth Level ──────────────────────────── -->
+        <div class="form-section">
+          <label class="form-label">
+            <span class="label-icon">🌊</span>
+            <span data-i18n="waterDepth">Water Depth Level</span>
+            <span class="form-label-urdu" data-i18n-ur="waterDepth">پانی کی گہرائی</span>
+          </label>
+          <div class="selector-grid" id="depth-selector">
+            <div class="selector-card" data-depth="ankle" data-value="ankle">
+              <span class="card-icon">🦶</span>
+              <span class="card-label" data-i18n="depthAnkle">Ankle-Deep</span>
+              <span class="card-sublabel">~10 cm</span>
+            </div>
+            <div class="selector-card" data-depth="knee" data-value="knee">
+              <span class="card-icon">🦵</span>
+              <span class="card-label" data-i18n="depthKnee">Knee-Deep</span>
+              <span class="card-sublabel">~30 cm</span>
+            </div>
+            <div class="selector-card" data-depth="waist" data-value="waist">
+              <span class="card-icon">🏊</span>
+              <span class="card-label" data-i18n="depthWaist">Waist-Deep</span>
+              <span class="card-sublabel">~60 cm</span>
+            </div>
+            <div class="selector-card" data-depth="submerged" data-value="submerged">
+              <span class="card-icon">🚗💨</span>
+              <span class="card-label" data-i18n="depthSubmerged">Submerged</span>
+              <span class="card-sublabel">>100 cm</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── SECTION 2: Vehicle Passability ────────────────────────── -->
+        <div class="form-section">
+          <label class="form-label">
+            <span class="label-icon">🚛</span>
+            <span data-i18n="vehiclePass">Vehicle Passability</span>
+            <span class="form-label-urdu" data-i18n-ur="vehiclePass">گاڑی کی گزرگاہ</span>
+          </label>
+          <div class="selector-grid" id="vehicle-selector">
+            <div class="selector-card" data-value="pedestrian">
+              <span class="card-icon">🚶</span>
+              <span class="card-label" data-i18n="vehPedestrian">Foot Only</span>
+            </div>
+            <div class="selector-card" data-value="4x4">
+              <span class="card-icon">🚙</span>
+              <span class="card-label" data-i18n="veh4x4">4x4 / Heavy Truck</span>
+            </div>
+            <div class="selector-card" data-value="boat">
+              <span class="card-icon">🚤</span>
+              <span class="card-label" data-i18n="vehBoat">Boat Required</span>
+            </div>
+            <div class="selector-card" data-value="impassable">
+              <span class="card-icon">⛔</span>
+              <span class="card-label" data-i18n="vehBlocked">Impassable</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── SECTION 3: Hazard Category ────────────────────────────── -->
+        <div class="form-section">
+          <label class="form-label">
+            <span class="label-icon">⚠️</span>
+            <span data-i18n="hazardType">Hazard Type</span>
+            <span class="form-label-urdu" data-i18n-ur="hazardType">خطرے کی قسم</span>
+          </label>
+          <div class="selector-grid" id="hazard-selector">
+            <div class="selector-card" data-value="submerged_road">
+              <span class="card-icon">🛣️</span>
+              <span class="card-label" data-i18n="hazSubmerged">Submerged Road</span>
+            </div>
+            <div class="selector-card" data-value="bridge_failure">
+              <span class="card-icon">🌉</span>
+              <span class="card-label" data-i18n="hazBridge">Bridge / Road Failure</span>
+            </div>
+            <div class="selector-card" data-value="landslide">
+              <span class="card-icon">🏔️</span>
+              <span class="card-label" data-i18n="hazLandslide">Landslide / Debris</span>
+            </div>
+            <div class="selector-card" data-value="electrical">
+              <span class="card-icon">⚡</span>
+              <span class="card-label" data-i18n="hazElectrical">Electrical Hazard</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── SECTION 4: Observation Notes ──────────────────────────── -->
+        <div class="form-section">
+          <label class="form-label">
+            <span class="label-icon">📝</span>
+            <span data-i18n="obsNotes">Observation Notes</span>
+            <span class="form-label-urdu" data-i18n-ur="obsNotes">مشاہدات</span>
+          </label>
+          <textarea 
+            class="form-textarea" 
+            id="observation-notes" 
+            placeholder="Describe the situation (English or Roman Urdu)... e.g., 'Nowshera bypass road covered in water, sedans stuck'"
+            data-i18n-placeholder="obsPlaceholder"
+            maxlength="500"
+          ></textarea>
+        </div>
+
+        <!-- ─── SECTION 5: Photo Upload ───────────────────────────────── -->
+        <div class="form-section">
+          <label class="form-label">
+            <span class="label-icon">📷</span>
+            <span data-i18n="photoEvidence">Photo Evidence</span>
+            <span class="form-label-urdu" data-i18n-ur="photoEvidence">تصویری ثبوت</span>
+          </label>
+          
+          <!-- Hidden file input -->
+          <input type="file" id="photo-input" accept="image/*" capture="environment" style="display: none;">
+          
+          <!-- Clickable upload zone -->
+          <div class="upload-zone" id="upload-zone">
+            <span class="upload-icon">📸</span>
+            <span class="upload-text" data-i18n="tapToCapture">Tap to capture or select photo</span>
+            <span class="upload-hint" data-i18n="autoCompress">Auto-compressed to &lt;200KB for low bandwidth</span>
+          </div>
+          
+          <!-- Image preview after selection -->
+          <div class="upload-preview" id="upload-preview">
+            <img id="preview-image" src="" alt="Report photo preview">
+            <div class="preview-info">
+              <span id="preview-size">—</span>
+              <button type="button" class="remove-image" id="remove-image" data-i18n="remove">Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── SUBMIT BUTTON ─────────────────────────────────────────── -->
+        <button type="submit" class="submit-btn" id="submit-btn">
+          <span class="btn-icon">📤</span>
+          <span data-i18n="submitReport">Submit Hazard Report</span>
+        </button>
+        
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       TOAST NOTIFICATION CONTAINER
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       APP SCRIPT — Map engine, GPS, form, image compressor, IndexedDB sync
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <script src="app.js"></script>
+
+</body>
+</html>
